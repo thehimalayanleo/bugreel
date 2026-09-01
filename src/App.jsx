@@ -27,6 +27,7 @@ export default function App() {
   const [autoCommand, setAutoCommand] = useState("npm test");
   const [health, setHealth] = useState({ liveModel: false, model: "opencode-go/glm-5.3-flash" });
   const [webmcpStatus, setWebmcpStatus] = useState({ active: false, count: 0, message: "Browser preview" });
+  const [cliCopied, setCliCopied] = useState(false);
   const [agentReceipt, setAgentReceipt] = useState({
     actor: "DEMO",
     action: "Example investigation loaded",
@@ -34,6 +35,8 @@ export default function App() {
   });
   const replayedJobs = useRef(new Set());
   const webmcpBridge = useRef(null);
+  const teamDetailsRef = useRef(null);
+  const cliDetailsRef = useRef(null);
   const autoCaptureCommand = `npm run bugreel -- --repo . --run "${autoCommand.replaceAll('"', '\\"')}" --server http://127.0.0.1:8787`;
 
   const selectedBug = useMemo(
@@ -44,6 +47,7 @@ export default function App() {
   const activeInvestigationRunning = activeJob?.type === "investigation" && ["queued", "running"].includes(activeJob.status);
   const activeInvestigationPartial = activeJob?.type === "investigation" && activeJob.status === "partial";
   const activeInvestigationFailed = activeJob?.type === "investigation" && activeJob.status === "error";
+  const activeDemoRunning = jobs.some((job) => job.demo && ["queued", "running"].includes(job.status));
   const waitingForFirstPreview = activeInvestigationRunning && !activeJob.preview;
   const frameStatusLabel = investigation.status === "diagnosis_grounded"
     ? "LEADING DIAGNOSIS CITED"
@@ -94,10 +98,10 @@ export default function App() {
       })
       .catch(() => {});
     refreshJobs();
-    const intervalMs = activeInvestigationRunning || swarmStarting ? 900 : 5_000;
+    const intervalMs = activeInvestigationRunning || activeDemoRunning || swarmStarting ? 350 : 5_000;
     const timer = window.setInterval(refreshJobs, intervalMs);
     return () => { active = false; window.clearInterval(timer); };
-  }, [activeInvestigationRunning, swarmStarting]);
+  }, [activeInvestigationRunning, activeDemoRunning, swarmStarting]);
 
   function recordAgentActivity(action, detail = "Visible workspace updated") {
     setAgentReceipt({ actor: "CHATGPT", action, detail });
@@ -167,6 +171,7 @@ export default function App() {
     } catch (error) {
       setNoticeKind("error");
       setNotice(error.message);
+      setAgentReceipt({ actor: "SYSTEM", action: "Hunt could not start", detail: error.message });
       throw error;
     } finally {
       setSubmitting(false);
@@ -213,6 +218,7 @@ export default function App() {
   }
 
   async function startDemoSwarm() {
+    if (teamDetailsRef.current) teamDetailsRef.current.open = true;
     setSwarmStarting(true);
     setNoticeKind("loading");
     setNotice("Releasing twenty isolated patch and regression workers.");
@@ -224,7 +230,8 @@ export default function App() {
       setManager(payload.manager || manager);
       setActiveJobId(payload.jobs?.[0]?.id || "");
       setNoticeKind("success");
-      setNotice("Twenty trusted regression fixtures entered the team queue.");
+      setNotice("Twenty trusted regression fixtures entered the queue. Watch them move through Hunt, Patch, Verify, and Ready.");
+      window.setTimeout(() => teamDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
       return payload;
     } catch (error) {
       setNoticeKind("error");
@@ -250,6 +257,8 @@ export default function App() {
     setActiveJobId(jobId);
     if (job?.type === "investigation") {
       window.setTimeout(() => document.querySelector(".detail-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    } else if (job?.demo) {
+      window.setTimeout(() => document.querySelector(".ops-verification")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 0);
     }
   }
 
@@ -282,16 +291,45 @@ export default function App() {
     setStage(4);
     setReplaying(false);
     setActiveJobId("");
-    setNotice("");
+    setNoticeKind("success");
+    setNotice("Example restored. Click Run 1-bug demo to watch the evidence chase from the beginning.");
     setAgentReceipt({ actor: "DEMO", action: "Example investigation restored", detail: sampleInvestigation.id });
+  }
+
+  function runGuidedDemo() {
+    setRepoUrl(DEFAULT_REPO);
+    setFailure(SAMPLE_FAILURE);
+    setExpected(DEFAULT_EXPECTED);
+    setInvestigation(sampleInvestigation);
+    setSelectedId(sampleInvestigation.hypotheses[0].id);
+    setStage(0);
+    setReplaying(true);
+    setActiveJobId("");
+    setNoticeKind("success");
+    setNotice("Demo running. The hunter will move through five evidence stages. Every suspect and stage remains clickable.");
+    setAgentReceipt({ actor: "YOU", action: "Started the clickable 1-bug demo", detail: "Follow the hunter or take control" });
+    window.setTimeout(() => document.querySelector(".detail-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  function advanceHunt() {
+    setReplaying(false);
+    setStage((current) => Math.min(current + 1, investigation.timeline.length - 1));
+  }
+
+  function openCliSetup() {
+    if (cliDetailsRef.current) cliDetailsRef.current.open = true;
+    window.setTimeout(() => cliDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   async function copyCli() {
     try {
       await navigator.clipboard.writeText(autoCaptureCommand);
+      setCliCopied(true);
       setNoticeKind("success");
       setNotice("Automatic capture command copied. Run it from the repository checkout.");
+      window.setTimeout(() => setCliCopied(false), 2_000);
     } catch {
+      setCliCopied(false);
       setNoticeKind("error");
       setNotice("Clipboard access failed. Copy the command from the terminal preview instead.");
     }
@@ -372,7 +410,16 @@ export default function App() {
           <h1 id="product-heading">Turn a failing test into an evidence chase.</h1>
           <p className="product-lede">See where the agent looked, compare three causes, and keep the bug open until a trusted regression passes.</p>
 
+          <div className="demo-launcher" aria-label="Clickable BugReel demos">
+            <p><b>NO SETUP NEEDED</b> Start here, then take control of the chase.</p>
+            <button className="demo-button primary" type="button" onClick={runGuidedDemo}><span>▶</span> RUN 1-BUG DEMO</button>
+            <button className="demo-button" type="button" onClick={() => startDemoSwarm().catch(() => {})} disabled={swarmStarting}>
+              <span>20×</span> {swarmStarting ? "STARTING WORKERS..." : activeDemoRunning ? "WATCH WORKERS MOVE" : "RUN 20-BUG REPLAY"}
+            </button>
+          </div>
+
           <form className="intake-bar" onSubmit={startHunt}>
+            <div className="form-heading"><span>OR USE A REAL FAILURE</span><small>Public source only</small></div>
             <label className="repo-field">
               <span>PUBLIC GITHUB REPOSITORY</span>
               <input aria-label="Public GitHub repository" type="url" value={repoUrl} onChange={(event) => setRepoUrl(event.target.value)} required />
@@ -448,6 +495,17 @@ export default function App() {
                   </button>
                 ))}
               </footer>
+              <div className="frame-actions">
+                <div>
+                  <span>YOUR NEXT CLICK</span>
+                  <strong>{stage < investigation.timeline.length - 1 ? investigation.timeline[stage + 1].label : "See the same workflow at team scale"}</strong>
+                </div>
+                {stage < investigation.timeline.length - 1 ? (
+                  <button type="button" onClick={advanceHunt}>NEXT STAGE <b>→</b></button>
+                ) : (
+                  <button type="button" onClick={() => startDemoSwarm().catch(() => {})} disabled={swarmStarting}>RUN 20-BUG REPLAY <b>↓</b></button>
+                )}
+              </div>
             </div>
           )}
 
@@ -462,17 +520,17 @@ export default function App() {
 
       <section className="secondary-section" aria-labelledby="secondary-heading">
         <header><p className="overline">AFTER THE FIRST BUG</p><h2 id="secondary-heading">Scale the same evidence object.</h2></header>
-        <details>
+        <details ref={teamDetailsRef}>
           <summary><span>TEAM REPLAY</span><strong>Watch 20 trusted fixture regressions move through one queue.</strong><b>+</b></summary>
           <BugOpsBoard jobs={jobs} manager={manager} activeJobId={activeJobId} activeJob={activeJob} onSelect={selectBoardJob} onStartSwarm={startDemoSwarm} swarmStarting={swarmStarting} onUseProbe={useGeneratedProbe} />
         </details>
-        <details id="cli">
+        <details id="cli" ref={cliDetailsRef}>
           <summary><span>TRUSTED LOCAL CAPTURE</span><strong>Run the failing test where the repository is allowed to execute.</strong><b>+</b></summary>
           <div className="cli-panel">
             <div className="cli-controls">
               <label><span>TEST COMMAND</span><input value={autoCommand} onChange={(event) => setAutoCommand(event.target.value)} /></label>
               <pre><code>{autoCaptureCommand}</code></pre>
-              <button className="action primary" type="button" onClick={copyCli}>COPY COMMAND</button>
+              <button className="action primary" type="button" onClick={copyCli}>{cliCopied ? "COPIED ✓" : "COPY COMMAND"}</button>
               <p>The local runner can apply a patch and return the real regression result. The browser cannot.</p>
             </div>
             <CliPreview investigation={investigation} jobStatus={activeJob?.type === "investigation" ? activeJob.status : null} />
@@ -485,6 +543,11 @@ export default function App() {
         <p>Failure in. Evidence trail out. Trusted test decides done.</p>
         <span>GLM-5.3 FLASH · OPENCODE GO</span>
       </footer>
+      <nav className="quick-dock" aria-label="Demo shortcuts">
+        <button type="button" onClick={runGuidedDemo}><span>1</span> ONE BUG</button>
+        <button type="button" onClick={() => startDemoSwarm().catch(() => {})} disabled={swarmStarting}><span>20</span> TEAM REPLAY</button>
+        <button type="button" onClick={openCliSetup}><span>&gt;_</span> CLI</button>
+      </nav>
     </div>
   );
 }
@@ -500,13 +563,16 @@ const OPS_COLUMNS = [
 function BugOpsBoard({ jobs, manager, activeJobId, activeJob, onSelect, onStartSwarm, swarmStarting, onUseProbe }) {
   const columns = Object.fromEntries(OPS_COLUMNS.map(([id]) => [id, jobs.filter((job) => (job.boardStage || "intake") === id)]));
   const selectedDemo = activeJob?.demo ? activeJob : null;
+  const demoJobs = jobs.filter((job) => job.demo);
+  const replayComplete = demoJobs.length > 0 && demoJobs.every((job) => job.status === "complete");
+  const replayProgress = demoJobs.length ? Math.round((demoJobs.filter((job) => job.status === "complete").length / demoJobs.length) * 100) : 0;
   return (
     <section className="ops-board" aria-labelledby="bug-ops-heading">
       <header className="ops-header">
         <div>
           <span id="bug-ops-heading">TEAM QUEUE</span>
           <strong>{jobs.length ? `${jobs.length} bugs under management` : "Ready for the 20-bug demo"}</strong>
-          <small>Local workers fan out. GLM resolution stays deliberately bounded.</small>
+          <small>Cards move live. Click any bug to inspect its patch and regression receipt.</small>
         </div>
         <div className="ops-metrics" aria-label={`${manager.activeWorkers || 0} active local workers and ${manager.activeModels} active GLM jobs`}>
           <span><b>{String(jobs.length).padStart(2, "0")}</b> BUGS</span>
@@ -515,9 +581,23 @@ function BugOpsBoard({ jobs, manager, activeJobId, activeJob, onSelect, onStartS
           <span><b>{manager.activeModels}/{manager.modelConcurrency}</b> GLM</span>
         </div>
         <button className="swarm-button" type="button" onClick={() => onStartSwarm().catch(() => {})} disabled={swarmStarting}>
-          {swarmStarting ? "STARTING 20..." : "WATCH 20-BUG DEMO"}
+          {swarmStarting ? "STARTING 20..." : replayComplete ? "REPLAY 20 BUGS" : demoJobs.length ? "RESTART REPLAY" : "RUN 20-BUG REPLAY"}
         </button>
       </header>
+      <div className="ops-progress" aria-label={`${replayProgress}% of demo regressions passed`}><span style={{ width: `${replayProgress}%` }} /></div>
+      {selectedDemo ? (
+        <div className="ops-verification" aria-live="polite">
+          <div><span>SELECTED WORKER {String(selectedDemo.worker).padStart(2, "0")}</span><strong>{selectedDemo.label}</strong><small>{selectedDemo.message}</small></div>
+          <dl>
+            <div><dt>STAGE</dt><dd>{(selectedDemo.boardStage || "intake").toUpperCase()}</dd></div>
+            <div><dt>PATCH</dt><dd>{selectedDemo.verification?.patchApplied ? "APPLIED IN ISOLATED COPY" : "WAITING"}</dd></div>
+            <div><dt>REGRESSION</dt><dd>{selectedDemo.verification?.regressionPassed ? `${selectedDemo.verification.testsPassed}/${selectedDemo.verification.testsTotal} PASSED` : selectedDemo.verification?.status?.toUpperCase()}</dd></div>
+            <div><dt>DURATION</dt><dd>{selectedDemo.verification?.durationMs ? `${selectedDemo.verification.durationMs}ms` : "PENDING"}</dd></div>
+          </dl>
+        </div>
+      ) : (
+        <p className="ops-prompt">Start the replay, then click a moving card to inspect what its worker is doing.</p>
+      )}
       <div className="ops-columns">
         {OPS_COLUMNS.map(([id, label, description]) => (
           <section className={`ops-column stage-${id}`} key={id} aria-label={`${label}: ${columns[id].length} bugs`}>
@@ -527,7 +607,7 @@ function BugOpsBoard({ jobs, manager, activeJobId, activeJob, onSelect, onStartS
               {columns[id].map((job) => {
                 const avatar = job.avatar || job.investigation?.hypotheses?.[0]?.avatar || job.preview?.hypotheses?.[0]?.avatar || { name: "Unassigned Bug", hue: 44, eyes: 2, horns: 0, gait: "float", pattern: "plain" };
                 return (
-                  <article className={`ops-card ${activeJobId === job.id ? "selected" : ""}`} key={job.id}>
+                  <article className={`ops-card ${activeJobId === job.id ? "selected" : ""} ${["queued", "running"].includes(job.status) ? "moving" : ""}`} key={job.id}>
                     <button type="button" onClick={() => onSelect(job.id)} aria-pressed={activeJobId === job.id}>
                       <BugAvatar bug={{ avatar }} size="small" />
                       <span className="ops-card-copy"><small>{job.id} · {job.repo}</small><strong>{job.label}</strong></span>
@@ -541,17 +621,6 @@ function BugOpsBoard({ jobs, manager, activeJobId, activeJob, onSelect, onStartS
           </section>
         ))}
       </div>
-      {selectedDemo && (
-        <div className="ops-verification" aria-live="polite">
-          <div><span>WORKER {String(selectedDemo.worker).padStart(2, "0")}</span><strong>{selectedDemo.label}</strong><small>{selectedDemo.message}</small></div>
-          <dl>
-            <div><dt>PATCH</dt><dd>{selectedDemo.verification?.patchApplied ? "APPLIED IN ISOLATED COPY" : "WAITING"}</dd></div>
-            <div><dt>REGRESSION</dt><dd>{selectedDemo.verification?.regressionPassed ? `${selectedDemo.verification.testsPassed}/${selectedDemo.verification.testsTotal} PASSED` : selectedDemo.verification?.status?.toUpperCase()}</dd></div>
-            <div><dt>COMMAND</dt><dd>{selectedDemo.verification?.command || "python3 -m unittest discover"}</dd></div>
-            <div><dt>DURATION</dt><dd>{selectedDemo.verification?.durationMs ? `${selectedDemo.verification.durationMs}ms` : "PENDING"}</dd></div>
-          </dl>
-        </div>
-      )}
       <p className="ops-boundary"><b>DEMO BOUNDARY</b> The 20-bug replay executes generated, trusted Python fixtures in isolated temporary folders. It proves concurrent orchestration and regression gating, not twenty simultaneous GLM calls or safe execution of arbitrary public repositories.</p>
     </section>
   );
