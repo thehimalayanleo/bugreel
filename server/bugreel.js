@@ -609,17 +609,23 @@ ${context.map((item) => `===== ${item.path}:${item.start}-${item.end} =====\n${i
 Return only {"title":"...","kind":"${kind}","failureEvidence":"SYNTHETIC PROBE - NOT OBSERVED\\n...","expectedBehavior":"...","file":"relative/path","lines":[1,2],"whyPlausible":"...","probeCommand":"..."}. Keep the response under 450 words.`;
   const release = await acquireModelSlot({ phase: "sampler", message: "GLM slot acquired. Generating a synthetic failure probe." });
   let result;
+  const citationIsValid = (value) => {
+    const cited = context.find((item) => item.path === value?.file);
+    return Boolean(cited && Array.isArray(value.lines) && value.lines.length === 2
+      && value.lines.every(Number.isInteger) && value.lines[0] >= cited.start
+      && value.lines[0] <= value.lines[1] && value.lines[1] <= cited.end);
+  };
   try {
     result = await call(prompt, { variant: "low", timeout: 45_000 });
+    if (!citationIsValid(result)) {
+      const allowed = context.map((item) => `${item.path}:${item.start}-${item.end}`).join("\n");
+      const correction = `${prompt}\n\nCITATION CORRECTION\nYour previous response used a file or line range outside the supplied source. Return one corrected full JSON object. The file must exactly match one allowed path, and both line numbers must stay inside its listed range. Do not change the synthetic, unobserved boundary.\n\nALLOWED CITATIONS\n${allowed}\n\nPREVIOUS RESPONSE\n${JSON.stringify(result).slice(0, 4_000)}`;
+      result = await call(correction, { variant: "low", timeout: 45_000 });
+    }
   } finally {
     release();
   }
-  const file = repository.files.find((item) => item.path === result.file);
-  const lineCount = file?.content.split("\n").length || 0;
-  const linesValid = Array.isArray(result.lines) && result.lines.length === 2
-    && result.lines.every(Number.isInteger) && result.lines[0] >= 1
-    && result.lines[0] <= result.lines[1] && result.lines[1] <= lineCount;
-  if (!file || !linesValid) throw new Error("GLM returned a synthetic probe without a valid source citation.");
+  if (!citationIsValid(result)) throw new Error("GLM returned a synthetic probe without a valid source citation after one bounded correction pass.");
   const failureEvidence = cleanGeneratedText(result.failureEvidence || "");
   return {
     title: cleanGeneratedText(result.title || `${kind} probe`).slice(0, 100),

@@ -187,6 +187,38 @@ test("GLM failure samples stay synthetic and source-cited", async () => {
   assert.match(result.boundary, /not failure evidence/i);
 });
 
+test("retries one invalid synthetic-probe citation and still fails closed", async () => {
+  const responses = [
+    {
+      title: "Invalid first probe",
+      failureEvidence: "unobserved boundary failure",
+      expectedBehavior: "reject an invalid boundary",
+      file: "src/not-supplied.py",
+      lines: [100, 120]
+    },
+    {
+      title: "Corrected boundary probe",
+      failureEvidence: "SYNTHETIC PROBE - NOT OBSERVED\nValueError at divide",
+      expectedBehavior: "reject a zero divisor",
+      file: "src/calculator.py",
+      lines: [1, 2],
+      whyPlausible: "The supplied boundary has no visible zero guard.",
+      probeCommand: "python -m pytest test_zero_divisor"
+    }
+  ];
+  const prompts = [];
+  const result = await sampleFailure({ kind: "boundary" }, repository, {
+    call: async (prompt) => {
+      prompts.push(prompt);
+      return responses.shift();
+    }
+  });
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[1], /CITATION CORRECTION/);
+  assert.deepEqual(result.lines, [1, 2]);
+  assert.equal(result.synthetic, true);
+});
+
 test("keeps generated figures provisional until the resolver is grounded", () => {
   const data = {
     incident: { title: "Zero divisor", summary: "division failed", observed: "exception", expected: "validation" },
