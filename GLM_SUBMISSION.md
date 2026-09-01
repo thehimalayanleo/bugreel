@@ -39,7 +39,7 @@ The product needs fast, structured reasoning over source, stack traces, and comp
 - [x] Automatic trusted-test intake with honest timeout behavior
 - [x] Public MIT-licensed repository
 - [x] 23 tests and production build passing
-- [ ] Live GLM investigation saved as evidence
+- [x] Live GLM investigation saved as `demo-assets/live-glm-proof.json`
 - [x] Public deployment verified anonymously
 - [ ] Public demo video verified anonymously
 - [x] Frontier Build selected; no X post or Most Viral entry

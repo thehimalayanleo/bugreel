@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-01T02:55:31.369Z",
+  "publicJobId": "JOB-E7F25D2D",
+  "publicJobUrl": "https://bugreel.onrender.com/api/investigations/JOB-E7F25D2D",
+  "repository": "https://github.com/thehimalayanleo/bugreel",
+  "failure": "ZeroDivisionError at fixtures/live-smoke/calculator.py:2",
+  "model": "GLM-5.3 Flash via OpenCode Go",
+  "strategy": "fast",
+  "elapsedMs": 12592,
+  "status": "diagnosis_grounded",
+  "rootCause": {
+    "file": "fixtures/live-smoke/calculator.py",
+    "lines": [1, 2],
+    "confidence": 0.9,
+    "explanation": "divide has no guard for count == 0, so division raises ZeroDivisionError instead of a clear validation error."
+  },
+  "challenger": "The reporter expectation conflicts with the test's == 0 assertion, so the contract must be confirmed before merging.",
+  "candidatePatch": {
+    "summary": "Raise ValueError when count is zero.",
+    "applied": false,
+    "regressionPassed": false
+  },
+  "boundary": "The source citation passed grounding. The candidate patch remains unverified until a trusted regression passes.",
+  "note": "The public service stores jobs in memory. This checked artifact preserves the verified result after a service restart."
+}
