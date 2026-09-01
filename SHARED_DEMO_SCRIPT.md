@@ -24,7 +24,7 @@ Keep BugReel beside ChatGPT. Ask: "Inspect this BugReel workspace and focus the 
 
 Show the WebMCP call to `inspect_bugreel_workspace`, then `show_investigation`. Point to the matching visible receipt in BugReel.
 
-Say: "WebMCP gives ChatGPT five typed BugReel tools. The agent and human operate the same job, hypotheses, citations, and visible state. Every view-changing agent action leaves a receipt."
+Say: "WebMCP gives ChatGPT seven typed BugReel tools. The agent can start asynchronous work, retrieve the exact job, and stage the next human action without scraping the page. Both sides share the same hypotheses, citations, and visible state."
 
 ## 1:02 to 1:25, prove the trust boundary
 

@@ -33,11 +33,13 @@ Without WebMCP, steps 2 through 5 require manual copying and navigation. With We
 
 ## Implementation
 
-BugReel registers five tools with `document.modelContext.registerTool`:
+BugReel registers seven tools with `document.modelContext.registerTool`:
 
 - `inspect_bugreel_workspace`
 - `start_failure_hunt`
 - `generate_failure_probe`
+- `inspect_bugreel_job`
+- `stage_failure_probe`
 - `show_investigation`
 - `start_team_replay`
 
@@ -49,7 +51,7 @@ Each tool has a strict JSON input schema, a clear effect description, and WebMCP
 
 ## Submission checklist
 
-- [x] Non-trivial WebMCP implementation with five working tool contracts
+- [x] Non-trivial WebMCP implementation with seven working tool contracts
 - [x] Human interface and agent tools share the same actions and state
 - [x] Ordinary-browser fallback remains usable
 - [x] Focused WebMCP contract tests

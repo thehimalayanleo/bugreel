@@ -30,17 +30,19 @@ candidate patch -> trusted regression -> done
 
 ## WebMCP collaboration
 
-BugReel progressively registers five tools through `document.modelContext.registerTool` when the browser supports WebMCP:
+BugReel progressively registers seven tools through `document.modelContext.registerTool` when the browser supports WebMCP:
 
 - `inspect_bugreel_workspace` reads the staged failure, current investigation, queue, and verification boundary.
 - `start_failure_hunt` sends an observed failure into the existing bounded GLM investigation route.
 - `generate_failure_probe` creates a source-cited synthetic test idea that remains unobserved until a human runs it.
+- `inspect_bugreel_job` retrieves the bounded status and result of one asynchronous investigation, synthetic probe, or trusted fixture.
+- `stage_failure_probe` moves a completed synthetic probe into the visible intake form without executing it or calling it observed evidence.
 - `show_investigation` brings a queued result or competing cause into the visible page.
 - `start_team_replay` loads twenty deterministic patch and regression fixtures without spending model calls.
 
 The tools call the same React actions and server routes as the human interface. There is no hidden agent-only workflow. Mutating and view-changing tool calls also leave a factual activity receipt on the visible page so the human can see what the agent changed. Tool registrations use an `AbortController` for cleanup, strict JSON schemas, read-only annotations where appropriate, and explicit descriptions of side effects and trust boundaries.
 
-In an ordinary browser, BugReel remains fully usable and labels the integration `WEBMCP READY`. In ChatGPT's in-app browser, or Chrome with WebMCP testing enabled, the header reports `5 TOOLS` after registration.
+In an ordinary browser, BugReel remains fully usable and labels the integration `WEBMCP READY`. In ChatGPT's in-app browser, or Chrome with WebMCP testing enabled, the header reports `7 TOOLS` after registration.
 
 The collaboration boundary is deliberate: an agent may organize evidence and propose a diagnosis, but only a trusted checkout may apply a patch and pass the regression gate.
 
@@ -126,7 +128,7 @@ The repository includes `render.yaml` for a single Node web service. The service
 1. Push this repository to a public Git host.
 2. Create a Render Blueprint from `render.yaml`.
 3. Set `OPENCODE_GO_API_KEY` as a secret environment variable.
-4. Verify `/api/health`, the primary evidence chase, and all five WebMCP tools from an anonymous browser session.
+4. Verify `/api/health`, the primary evidence chase, and all seven WebMCP tools from an anonymous browser session.
 
 Local development binds to `127.0.0.1`. The Render blueprint sets `HOST=0.0.0.0` for the public service. The API credential remains server-side and is never sent to the browser.
 

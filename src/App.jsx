@@ -242,13 +242,16 @@ export default function App() {
     }
   }
 
-  function useGeneratedProbe(job) {
+  function useGeneratedProbe(job, source = "human") {
     if (!job.sample) return;
     setActiveJobId("");
     setFailure(job.sample.failureEvidence);
     setExpected(job.sample.expectedBehavior);
     setNoticeKind("warning");
     setNotice(job.sample.boundary);
+    if (source === "agent") {
+      recordAgentActivity(`Staged synthetic probe ${job.id}`, "Waiting for a human to run it and report an observed failure");
+    }
     document.querySelector(".intake-bar")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
@@ -280,6 +283,74 @@ export default function App() {
       "The same evidence is now visible to the human"
     );
     return { jobId, hypothesisId: hypothesisId || null, visible: true, status: job.status };
+  }
+
+  function inspectJob({ jobId } = {}) {
+    const job = jobs.find((item) => item.id === jobId);
+    if (!job) throw new Error(`Job ${jobId || "(missing id)"} is not in the current BugReel queue.`);
+    const result = {
+      id: job.id,
+      type: job.type,
+      repo: job.repo,
+      label: job.label,
+      status: job.status,
+      phase: job.phase,
+      message: job.message,
+      queuePosition: job.queuePosition || 0,
+      boardStage: job.boardStage,
+      verification: job.verification || null
+    };
+    if (job.sample) {
+      result.probe = {
+        title: job.sample.title,
+        kind: job.sample.kind,
+        status: job.sample.status,
+        synthetic: true,
+        failureEvidence: job.sample.failureEvidence,
+        expectedBehavior: job.sample.expectedBehavior,
+        citation: { file: job.sample.file, lines: job.sample.lines },
+        whyPlausible: job.sample.whyPlausible,
+        probeCommand: job.sample.probeCommand,
+        boundary: job.sample.boundary
+      };
+    }
+    const jobInvestigation = job.investigation || job.preview;
+    if (jobInvestigation) {
+      result.investigation = {
+        id: jobInvestigation.id,
+        status: jobInvestigation.status,
+        hypotheses: jobInvestigation.hypotheses.map((item) => ({
+          id: item.id,
+          title: item.title,
+          status: item.status,
+          citation: { file: item.file, lines: item.lines },
+          evidence: item.evidence,
+          counterevidence: item.counterevidence,
+          nextProbe: item.nextProbe,
+          confidence: item.confidence,
+          confidenceBoundary: "Directional model ranking only. Not a calibrated probability."
+        })),
+        rootCause: jobInvestigation.rootCause || null,
+        boundary: jobInvestigation.boundary
+      };
+    }
+    return result;
+  }
+
+  function stageFailureProbe({ jobId } = {}) {
+    const job = jobs.find((item) => item.id === jobId);
+    if (!job) throw new Error(`Probe ${jobId || "(missing id)"} is not in the current BugReel queue.`);
+    if (job.type !== "failure_sample") throw new Error(`${jobId} is not a synthetic failure-probe job.`);
+    if (job.status !== "complete" || !job.sample) throw new Error(`${jobId} is not ready to stage. Inspect it again after the probe completes.`);
+    useGeneratedProbe(job, "agent");
+    return {
+      jobId,
+      staged: true,
+      synthetic: true,
+      visible: true,
+      nextAction: "A human must run the proposed probe and replace this text with an observed failure before starting a diagnosis.",
+      boundary: job.sample.boundary
+    };
   }
 
   function loadExample() {
@@ -375,6 +446,8 @@ export default function App() {
     }),
     startHunt: (input) => createHunt(input, "agent"),
     generateProbe: generateFailureProbe,
+    inspectJob,
+    stageProbe: stageFailureProbe,
     showInvestigation,
     startTeamReplay: async () => {
       const payload = await startDemoSwarm();

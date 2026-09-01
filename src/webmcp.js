@@ -69,6 +69,36 @@ export function createBugReelToolDefinitions(getBridge) {
       execute: async (input = {}) => toolResult(await requireBridge(getBridge).generateProbe(input))
     },
     {
+      name: "inspect_bugreel_job",
+      title: "Inspect a BugReel job",
+      description: "Read the current status and bounded result of one asynchronous BugReel investigation, synthetic probe, or trusted fixture job. This does not change the visible page or repository.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          jobId: { type: "string", description: "BugReel job identifier returned by another tool." }
+        },
+        required: ["jobId"],
+        additionalProperties: false
+      },
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      execute: async (input = {}) => toolResult(requireBridge(getBridge).inspectJob(input))
+    },
+    {
+      name: "stage_failure_probe",
+      title: "Stage a failure probe",
+      description: "Move a completed synthetic failure probe into BugReel's visible intake form for a human to review and run. This changes only browser state; it never executes the probe or converts it into observed evidence.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          jobId: { type: "string", description: "Completed synthetic failure-probe job identifier." }
+        },
+        required: ["jobId"],
+        additionalProperties: false
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      execute: async (input = {}) => toolResult(requireBridge(getBridge).stageProbe(input))
+    },
+    {
       name: "show_investigation",
       title: "Show a BugReel investigation",
       description: "Open a queued BugReel investigation in the visible page and optionally focus one competing cause. This changes only the browser view.",

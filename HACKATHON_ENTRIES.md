@@ -19,7 +19,7 @@ Primary judge question: can GLM investigate a real failure quickly without turni
 
 Lead with the collaboration interface:
 
-- five typed `document.modelContext.registerTool` tools
+- seven typed `document.modelContext.registerTool` tools
 - the same React actions for people and agents
 - visible receipts for agent-driven state changes
 - shared failure, hypothesis, citation, and verification state
