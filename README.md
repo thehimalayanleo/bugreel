@@ -124,6 +124,14 @@ The repository includes `render.yaml` for a single Node web service. The service
 
 Local development binds to `127.0.0.1`. The Render blueprint sets `HOST=0.0.0.0` for the public service. The API credential remains server-side and is never sent to the browser.
 
+## Entry packets
+
+BugReel uses one product, repository, deployment, and under-three-minute demo for two distinct entries:
+
+- [`GLM_SUBMISSION.md`](./GLM_SUBMISSION.md) leads with bounded GLM reasoning and evidence gates.
+- [`WEBMCP_SUBMISSION.md`](./WEBMCP_SUBMISSION.md) leads with typed human-agent collaboration.
+- [`HACKATHON_ENTRIES.md`](./HACKATHON_ENTRIES.md) records the shared-artifact strategy and claim boundary.
+
 ## Evidence boundary
 
 `diagnosis_grounded` means the model returned a structurally valid source citation that covers an observed failure location. It does not prove the causal explanation or candidate patch. A bug reaches Ready only after a real targeted regression passes in a trusted execution boundary.

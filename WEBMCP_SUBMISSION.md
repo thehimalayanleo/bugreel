@@ -59,12 +59,12 @@ Each tool has a strict JSON input schema, a clear effect description, and WebMCP
 - [x] WebMCP calls exercised locally in ChatGPT's in-app browser
 - [x] Public deployment blueprint with server-only model credential
 - [ ] Working public deployment verified anonymously
-- [ ] Public source repository verified anonymously
+- [x] Public source repository verified with an MIT license
 - [ ] Public demo video under three minutes with audio
 - [ ] Final Devpost submission confirmed
 
 ## Links
 
 - Live app: TBD
-- Public repository: TBD
+- Public repository: https://github.com/thehimalayanleo/bugreel
 - Demo video: TBD
