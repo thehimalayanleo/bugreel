@@ -1,6 +1,6 @@
 # GLM-5.3 Flash Lightning Hackathon submission draft
 
-Nothing in this file has been submitted. The public video and final submission receipt still need verification. This entry targets the Frontier Build track only; no X post will be created for the Most Viral track.
+Nothing in this file has been submitted. The final submission receipt still needs verification. This entry targets the Frontier Build track only; no X post will be created for the Most Viral track.
 
 ## Team name
 
@@ -30,7 +30,7 @@ The product needs fast, structured reasoning over source, stack traces, and comp
 
 - Repository: https://github.com/thehimalayanleo/bugreel
 - Live application: https://bugreel.onrender.com
-- Public demo video: TBD
+- Public demo video: https://github.com/thehimalayanleo/bugreel/raw/refs/heads/main/demo-assets/bugreel-demo.mp4
 
 ## Submission gate
 
@@ -41,6 +41,6 @@ The product needs fast, structured reasoning over source, stack traces, and comp
 - [x] 23 tests and production build passing
 - [x] Live GLM investigation saved as `demo-assets/live-glm-proof.json`
 - [x] Public deployment verified anonymously
-- [ ] Public demo video verified anonymously
+- [x] Public demo video verified anonymously
 - [x] Frontier Build selected; no X post or Most Viral entry
 - [ ] Final Cerebral Valley submission confirmed by Ajinkya
