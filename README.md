@@ -131,6 +131,7 @@ BugReel uses one product, repository, deployment, and under-three-minute demo fo
 - [`GLM_SUBMISSION.md`](./GLM_SUBMISSION.md) leads with bounded GLM reasoning and evidence gates.
 - [`WEBMCP_SUBMISSION.md`](./WEBMCP_SUBMISSION.md) leads with typed human-agent collaboration.
 - [`HACKATHON_ENTRIES.md`](./HACKATHON_ENTRIES.md) records the shared-artifact strategy and claim boundary.
+- [`SHARED_DEMO_SCRIPT.md`](./SHARED_DEMO_SCRIPT.md) is the single under-three-minute proof sequence for both entries.
 
 ## Evidence boundary
 
