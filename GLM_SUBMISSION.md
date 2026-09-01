@@ -25,7 +25,7 @@ The product needs fast, structured reasoning over source, stack traces, and comp
 ## Public links
 
 - Repository: https://github.com/thehimalayanleo/bugreel
-- Live application: TBD
+- Live application: https://bugreel.onrender.com
 - Public demo video: TBD
 - X post: TBD
 
@@ -37,7 +37,7 @@ The product needs fast, structured reasoning over source, stack traces, and comp
 - [x] Public MIT-licensed repository
 - [x] 23 tests and production build passing
 - [ ] Live GLM investigation saved as evidence
-- [ ] Public deployment verified anonymously
+- [x] Public deployment verified anonymously
 - [ ] Public demo video verified anonymously
 - [ ] X post published and verified
 - [ ] Final Cerebral Valley submission confirmed by Ajinkya

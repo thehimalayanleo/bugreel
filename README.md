@@ -2,6 +2,8 @@
 
 **One failure. One chase. One gate.**
 
+Live application: https://bugreel.onrender.com
+
 BugReel turns one failing test, stack trace, or error log into a shared visual investigation with competing causes, a checked source citation, a bounded patch, and an explicit regression gate. The primary screen keeps the observed failure, arcade evidence chase, leading diagnosis, and verification state visible together.
 
 With WebMCP, ChatGPT can hand that failure into the page, inspect the competing causes, and focus the result for the human. The browser agent and the person share one visible investigation instead of copying state between chat and a separate debugging dashboard.

@@ -31,7 +31,7 @@ Primary judge question: can a person and browser agent advance the same debuggin
 
 - Product: BugReel
 - Repository: https://github.com/thehimalayanleo/bugreel
-- Deployment: one public HTTPS application
+- Deployment: https://bugreel.onrender.com
 - Demo: one narrated video under three minutes that visibly proves both GLM reasoning and WebMCP collaboration
 
 The submission descriptions should remain distinct. The GLM entry explains why the model work is non-trivial. The WebMCP entry explains why exposing typed browser tools changes the user experience.
