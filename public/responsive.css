@@ -1,0 +1,47 @@
+@media (max-width: 820px) {
+  .journey-strip ol {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+
+  .journey-strip li {
+    min-height: 82px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .journey-strip li:last-child {
+    border-bottom: 0;
+  }
+
+  .journey-strip li::after {
+    content: "↓";
+    top: auto;
+    right: 18px;
+    bottom: -7px;
+  }
+}
+
+@media (max-width: 520px) {
+  .auto-flow {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+
+  .auto-flow li {
+    min-height: 64px;
+    border-right: 0;
+    border-bottom: 1px solid #343a31;
+  }
+
+  .auto-flow li:last-child {
+    border-bottom: 0;
+  }
+
+  .auto-flow li:not(:last-child)::after {
+    content: "↓";
+    top: auto;
+    right: 18px;
+    bottom: -7px;
+  }
+}
