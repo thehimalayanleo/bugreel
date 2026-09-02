@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { sampleInvestigation, SAMPLE_FAILURE } from "../src/sample.js";
 import { fetchGitHubRepository, parseGitHubRepo, readLocalRepository, renderCli, runInvestigation } from "../server/bugreel.js";
+import { verifyPrHandoff } from "../server/pr-handoff.js";
 
 const args = process.argv.slice(2);
 const options = parseArgs(args);
@@ -16,6 +17,7 @@ Usage:
   bugreel --repo . --run "npm test" --server http://127.0.0.1:8787
   bugreel --repo . --failure-file ./failure.log
   bugreel --repo https://github.com/owner/repo --failure-file ./failure.log
+  bugreel --repo . --verify-pr --run "npm test" --server https://bugreel.onrender.com
 
 Options:
   --sample              Replay the bundled grounded fixture
@@ -25,6 +27,9 @@ Options:
   --server <url>        Add the completed diagnosis to a running BugReel team queue
   --expected <text>     Expected behavior
   --deep                Run three independent model passes instead of Fast Hunt
+  --verify-pr           Verify the current local diff and passing regression, then prepare but never create a GitHub PR
+  --pr-title <text>     Optional pull-request title used by --verify-pr
+  --base <branch>       Pull-request base branch for the displayed GitHub command (default: main)
   --json                Emit the shared investigation artifact as JSON
   --help                Show this help
 
@@ -35,7 +40,16 @@ Local source is sent to OpenCode Go only when you run a live hunt.`);
 let investigation;
 let capturedFailure = "";
 let importedJobId = "";
-if (options.sample || (!options.repo && !options.failureFile && !options.testCommand)) {
+if (options.verifyPr) {
+  if (!options.repo || /^https:\/\/github\.com\//.test(options.repo)) throw new Error("--verify-pr requires a trusted local checkout via --repo .");
+  const receipt = await verifyPrHandoff({
+    repoPath: resolve(options.repo), testCommand: options.testCommand, runTest: runTestCommand,
+    title: options.prTitle, base: options.base
+  });
+  if (options.server) await publishPrReceipt(options.server, receipt);
+  console.log(options.json ? JSON.stringify(receipt, null, 2) : renderPrReceipt(receipt));
+  process.exit(0);
+} else if (options.sample || (!options.repo && !options.failureFile && !options.testCommand)) {
   investigation = sampleInvestigation;
 } else {
   if (!options.repo || (!options.failureFile && !options.testCommand)) throw new Error("--repo requires either --run or --failure-file.");
@@ -73,15 +87,16 @@ if (options.server && importedJobId) await publishInvestigation(options.server, 
 console.log(options.json ? JSON.stringify(investigation, null, 2) : renderCli(investigation));
 
 function parseArgs(values) {
-  const result = { sample: false, deep: false, json: false, help: false, repo: "", failureFile: "", testCommand: "", server: "", expected: "" };
+  const result = { sample: false, deep: false, json: false, help: false, verifyPr: false, repo: "", failureFile: "", testCommand: "", server: "", expected: "", prTitle: "", base: "main" };
   for (let index = 0; index < values.length; index += 1) {
     const value = values[index];
     if (value === "--sample") result.sample = true;
     else if (value === "--deep") result.deep = true;
     else if (value === "--json") result.json = true;
+    else if (value === "--verify-pr") result.verifyPr = true;
     else if (value === "--help" || value === "-h") result.help = true;
-    else if (["--repo", "--run", "--failure-file", "--server", "--expected"].includes(value)) {
-      const target = { "--repo": "repo", "--run": "testCommand", "--failure-file": "failureFile", "--server": "server", "--expected": "expected" }[value];
+    else if (["--repo", "--run", "--failure-file", "--server", "--expected", "--pr-title", "--base"].includes(value)) {
+      const target = { "--repo": "repo", "--run": "testCommand", "--failure-file": "failureFile", "--server": "server", "--expected": "expected", "--pr-title": "prTitle", "--base": "base" }[value];
       result[target] = values[++index] || "";
     } else throw new Error(`Unknown argument: ${value}`);
   }
@@ -132,4 +147,22 @@ async function publishImportError(server, id, message) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ error: `GLM resolution stopped: ${String(message).slice(0, 180)}` })
   }).catch(() => {});
+}
+
+async function publishPrReceipt(server, receipt) {
+  const response = await fetch(`${String(server).replace(/\/$/, "")}/api/pr-receipts`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(receipt)
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "BugReel could not add the PR receipt to Team View.");
+  console.error(`Published ${payload.id} PR handoff receipt to BugReel Team View.`);
+}
+
+function renderPrReceipt(receipt) {
+  return [
+    "BUGREEL PR HANDOFF READY", `Repository: ${receipt.repositoryUrl}`, `Branch: ${receipt.branch} -> ${receipt.base}`,
+    `Regression: PASS (${receipt.testCommand})`, `Changed: ${receipt.changedFiles.join(", ")}`,
+    "", "Review the local diff, then run these yourself:", receipt.nextCommands.push, receipt.nextCommands.createPullRequest,
+    "", receipt.boundary
+  ].join("\n");
 }

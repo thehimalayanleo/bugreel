@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { clientKey, createRateLimiter } from "./rate-limit.js";
+import { fetchPublicRepositories } from "./github.js";
 import { sampleInvestigation } from "../src/sample.js";
 import {
   createBugAvatar, FAILURE_SAMPLE_KINDS, finalizeTimedOutInvestigation, fetchGitHubRepository, MODEL, modelAvailable, parseGitHubRepo,
@@ -29,6 +30,10 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/api/sample") {
       return json(response, 200, { mode: "fixture", investigation: sampleInvestigation });
     }
+    const profileMatch = request.method === "GET" && request.url?.match(/^\/api\/github-users\/([^/?]+)\/repos$/);
+    if (profileMatch) {
+      return json(response, 200, await fetchPublicRepositories(decodeURIComponent(profileMatch[1])));
+    }
     if (request.method === "GET" && request.url === "/api/investigations") {
       const ordered = [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 40);
       return json(response, 200, {
@@ -44,6 +49,10 @@ const server = createServer(async (request, response) => {
       const body = await readJson(request);
       const imported = importInvestigation(body);
       return json(response, 201, publicJob(imported));
+    }
+    if (request.method === "POST" && request.url === "/api/pr-receipts") {
+      const body = await readJson(request);
+      return json(response, 201, publicJob(importPrReceipt(body)));
     }
     const importMatch = request.method === "PUT" && request.url?.match(/^\/api\/imports\/([A-Z0-9-]+)$/);
     if (importMatch) {
@@ -243,6 +252,40 @@ function updateImportedInvestigation(id, body) {
   return job;
 }
 
+function importPrReceipt(receipt) {
+  if (receipt?.mode !== "trusted_checkout" || receipt?.status !== "pr_ready_for_human_review" || receipt?.testsPassed !== true) {
+    throw new Error("The PR handoff receipt is missing trusted regression proof.");
+  }
+  if (!/^https:\/\/github\.com\/[A-Za-z\d_.-]+\/[A-Za-z\d_.-]+$/i.test(String(receipt.repositoryUrl || ""))) {
+    throw new Error("The PR handoff receipt must name an exact public GitHub repository.");
+  }
+  if (!Array.isArray(receipt.changedFiles) || receipt.changedFiles.length === 0) {
+    throw new Error("The PR handoff receipt must list a changed file.");
+  }
+  const now = new Date().toISOString();
+  const job = {
+    id: `PR-${randomUUID().slice(0, 8).toUpperCase()}`,
+    type: "pr_handoff",
+    repo: receipt.repositoryUrl.replace("https://github.com/", ""),
+    label: String(receipt.title || "Verified local change").slice(0, 120),
+    status: "complete",
+    phase: "pr_review",
+    message: "Trusted local diff and regression passed. Waiting for a human to review and publish the pull request.",
+    startedAt: now,
+    phaseStartedAt: now,
+    updatedAt: now,
+    finishedAt: now,
+    prHandoff: {
+      ...receipt,
+      diff: String(receipt.diff || "").slice(0, 20_000),
+      proposedBody: String(receipt.proposedBody || "").slice(0, 4_000)
+    }
+  };
+  jobs.set(job.id, job);
+  console.log(`[job ${job.id}] pr_review: ${job.message}`);
+  return job;
+}
+
 const DEMO_FAILURES = [
   "Resume loses cursor state", "Zero divisor crosses boundary", "Retry budget decrements twice", "Cache key ignores tenant",
   "Pagination skips final row", "Timeout races cleanup", "Schema coercion drops null", "Batch order becomes unstable",
@@ -378,11 +421,13 @@ function publicJob(job) {
     ...(job.preview ? { preview: job.preview } : {}),
     ...(job.investigation ? { investigation: job.investigation } : {}),
     ...(job.sample ? { sample: job.sample } : {}),
-    ...(job.sweep ? { sweep: job.sweep } : {})
+    ...(job.sweep ? { sweep: job.sweep } : {}),
+    ...(job.prHandoff ? { prHandoff: job.prHandoff } : {})
   };
 }
 
 function boardStage(job) {
+  if (job.prHandoff?.testsPassed) return "done";
   if (job.verification?.regressionPassed) return "done";
   if (job.phase === "verifying" || job.status === "error" || job.status === "partial") return "verify";
   if (job.phase === "patching" || (job.status === "complete" && job.investigation?.status === "diagnosis_grounded")) return "patch";

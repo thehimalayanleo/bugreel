@@ -18,6 +18,9 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [probeSubmitting, setProbeSubmitting] = useState(false);
   const [sweepSubmitting, setSweepSubmitting] = useState(false);
+  const [githubUser, setGithubUser] = useState("thehimalayanleo");
+  const [profileRepos, setProfileRepos] = useState([]);
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
   const [swarmStarting, setSwarmStarting] = useState(false);
   const [probeKind, setProbeKind] = useState("boundary");
   const [jobs, setJobs] = useState([]);
@@ -45,6 +48,7 @@ export default function App() {
     [investigation, selectedId]
   );
   const activeJob = useMemo(() => jobs.find((job) => job.id === activeJobId), [jobs, activeJobId]);
+  const latestPrHandoff = useMemo(() => jobs.find((job) => job.type === "pr_handoff" && job.prHandoff), [jobs]);
   const activeInvestigationRunning = activeJob?.type === "investigation" && ["queued", "running"].includes(activeJob.status);
   const activeInvestigationPartial = activeJob?.type === "investigation" && activeJob.status === "partial";
   const activeInvestigationFailed = activeJob?.type === "investigation" && activeJob.status === "error";
@@ -244,6 +248,38 @@ export default function App() {
     } finally {
       setSweepSubmitting(false);
     }
+  }
+
+  async function loadPublicRepositories(input = {}, source = "human") {
+    const username = String(input.username ?? githubUser).trim();
+    setGithubUser(username);
+    setProfileSubmitting(true);
+    setNoticeKind("loading");
+    setNotice(`Loading public repositories from @${username}.`);
+    try {
+      const response = await fetch(`/api/github-users/${encodeURIComponent(username)}/repos`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "GitHub could not load public repositories.");
+      setProfileRepos(payload.repositories || []);
+      setNoticeKind("success");
+      setNotice(`Loaded ${payload.repositories?.length || 0} open repositories from @${payload.username}. Choose one to scan.`);
+      if (source === "agent") recordAgentActivity(`Loaded public repositories for @${payload.username}`, `${payload.repositories?.length || 0} open repositories are now visible`);
+      return payload;
+    } catch (error) {
+      setNoticeKind("error");
+      setNotice(error.message);
+      throw error;
+    } finally {
+      setProfileSubmitting(false);
+    }
+  }
+
+  function chooseRepository(repository) {
+    setRepoUrl(repository.url);
+    setNoticeKind("success");
+    setNotice(`${repository.fullName} is staged. Scan three issue classes, or add an observed failure below.`);
+    recordAgentActivity(`Selected ${repository.fullName}`, "Public repository staged for a visible BugReel analysis");
+    document.querySelector(".intake-bar")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function startDemoSwarm() {
@@ -482,11 +518,20 @@ export default function App() {
         activeWorkers: manager.activeWorkers,
         verificationPassed: manager.verificationPassed
       },
+      publicProfile: { username: githubUser, repositories: profileRepos.map(({ fullName, url, language }) => ({ fullName, url, language })) },
+      prHandoff: latestPrHandoff?.prHandoff ? {
+        id: latestPrHandoff.id,
+        status: latestPrHandoff.prHandoff.status,
+        repositoryUrl: latestPrHandoff.prHandoff.repositoryUrl,
+        testsPassed: latestPrHandoff.prHandoff.testsPassed,
+        boundary: latestPrHandoff.prHandoff.boundary
+      } : null,
       claimBoundary: "Agent diagnosis is advisory. Only a trusted checkout can apply the patch and pass the regression gate."
     }),
     startHunt: (input) => createHunt(input, "agent"),
     generateProbe: generateFailureProbe,
     generateIssueSweep,
+    listPublicRepositories: (input) => loadPublicRepositories(input, "agent"),
     inspectJob,
     stageProbe: stageFailureProbe,
     showInvestigation,
@@ -534,6 +579,21 @@ export default function App() {
               <span>3×</span> {sweepSubmitting ? "SCANNING SOURCE..." : "SCAN 3 ISSUE CLASSES"}
             </button>
           </div>
+
+          <section className="repository-picker" aria-labelledby="repository-picker-heading">
+            <header><span id="repository-picker-heading">ADD AN OPEN REPOSITORY</span><strong>Choose from any public GitHub profile.</strong></header>
+            <p>BugReel reads public metadata only, filters forks and archived projects, then gives the selected repository the same visible issue-sweep path.</p>
+            <form onSubmit={(event) => { event.preventDefault(); loadPublicRepositories().catch(() => {}); }}>
+              <label><span>GITHUB USERNAME</span><input value={githubUser} onChange={(event) => setGithubUser(event.target.value)} aria-label="GitHub username" required /></label>
+              <button type="submit" disabled={profileSubmitting}>{profileSubmitting ? "LOADING..." : "LOAD PUBLIC REPOS"}</button>
+            </form>
+            {profileRepos.length > 0 && <div className="repository-list" aria-label="Public repositories">
+              {profileRepos.map((repository) => <article key={repository.url}>
+                <div><small>{repository.language || "SOURCE"} · {repository.stars} ★</small><strong>{repository.fullName}</strong><p>{repository.description || "No repository description."}</p></div>
+                <div className="repository-actions"><button type="button" onClick={() => chooseRepository(repository)}>USE REPO</button><button type="button" onClick={() => generateIssueSweep({ repoUrl: repository.url }).catch(() => {})} disabled={sweepSubmitting}>SCAN 3</button></div>
+              </article>)}
+            </div>}
+          </section>
 
           {activeJob?.type === "failure_sweep" && (
             <IssueSweepResults job={activeJob} onUseProbe={(probe) => useGeneratedProbe(activeJob, "human", probe)} />
@@ -657,6 +717,10 @@ export default function App() {
             <CliPreview investigation={investigation} jobStatus={activeJob?.type === "investigation" ? activeJob.status : null} />
           </div>
         </details>
+        <details className="pr-details" open={Boolean(latestPrHandoff)}>
+          <summary><span>VERIFIED PR HANDOFF</span><strong>Prepare a pull request only after a trusted local diff and regression pass.</strong><b>+</b></summary>
+          <PrHandoffPanel receipt={latestPrHandoff?.prHandoff} />
+        </details>
       </section>
 
       <footer className="footer">
@@ -708,6 +772,28 @@ function IssueSweepResults({ job, onUseProbe }) {
       </div>
       <small className="issue-sweep-boundary">A loaded idea stays marked SYNTHETIC PROBE - NOT OBSERVED until the proposed test actually fails.</small>
     </section>
+  );
+}
+
+function PrHandoffPanel({ receipt }) {
+  const command = "npm run bugreel -- --repo . --verify-pr --run \"npm test\" --server https://bugreel.onrender.com";
+  if (!receipt) {
+    return (
+      <div className="pr-handoff-panel">
+        <div><span>LOCAL GATE</span><strong>Make the fix in a trusted checkout, then prove the original regression passes.</strong><p>BugReel does not execute public repository code in the browser and it never opens a PR automatically.</p></div>
+        <pre><code>{command}</code></pre>
+        <ol><li>Run a real failure hunt from the local checkout.</li><li>Review and apply the candidate fix yourself.</li><li>Run this command. It checks the local diff, reruns the regression, and posts a visible receipt.</li><li>Review the generated `git push` and `gh pr create` commands before running them yourself.</li></ol>
+      </div>
+    );
+  }
+  return (
+    <div className="pr-handoff-panel ready">
+      <header><span>PR READY FOR HUMAN REVIEW</span><strong>{receipt.repositoryUrl}</strong></header>
+      <p><b>PASS</b> {receipt.testCommand} · {receipt.changedFiles?.length || 0} changed file{receipt.changedFiles?.length === 1 ? "" : "s"} · {receipt.branch} → {receipt.base}</p>
+      <div className="pr-command-grid"><pre><code>{receipt.nextCommands?.push}</code></pre><pre><code>{receipt.nextCommands?.createPullRequest}</code></pre></div>
+      <details><summary>Review verified local diff</summary><pre><code>{receipt.diff}</code></pre></details>
+      <small>{receipt.boundary}</small>
+    </div>
   );
 }
 

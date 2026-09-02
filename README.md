@@ -8,7 +8,7 @@ Demo video: [Watch the 40-second BugReel walkthrough](./demo-assets/bugreel-demo
 
 Verified live GLM run: [`demo-assets/live-glm-proof.json`](./demo-assets/live-glm-proof.json)
 
-BugReel turns one failing test, stack trace, or error log into a shared visual investigation with competing causes, a checked source citation, a bounded patch, and an explicit regression gate. The primary screen keeps the observed failure, arcade evidence chase, leading diagnosis, and verification state visible together.
+BugReel turns one failing test, stack trace, or error log into a shared visual investigation with competing causes, a checked source citation, a bounded patch, and an explicit regression gate. A public GitHub-profile picker makes the repository-to-analysis path visible: load open repositories from a profile, select one, and scan three source-cited issue classes without claiming they are confirmed bugs.
 
 With WebMCP, ChatGPT can hand that failure into the page, inspect the competing causes, and focus the result for the human. The browser agent and the person share one visible investigation instead of copying state between chat and a separate debugging dashboard.
 
@@ -30,12 +30,13 @@ candidate patch -> trusted regression -> done
 
 ## WebMCP collaboration
 
-BugReel progressively registers seven tools through `document.modelContext.registerTool` when the browser supports WebMCP:
+BugReel progressively registers nine tools through `document.modelContext.registerTool` when the browser supports WebMCP:
 
 - `inspect_bugreel_workspace` reads the staged failure, current investigation, queue, and verification boundary.
 - `start_failure_hunt` sends an observed failure into the existing bounded GLM investigation route.
 - `generate_failure_probe` creates a source-cited synthetic test idea that remains unobserved until a human runs it.
 - `generate_issue_sweep` creates three distinct source-cited synthetic test ideas, so an agent can show boundary, state, control, data, or concurrency coverage without pretending that it found three confirmed bugs.
+- `list_public_repositories` loads a GitHub profile's non-fork, non-archived public repositories into the same visible picker, without reading source or executing code.
 - `inspect_bugreel_job` retrieves the bounded status and result of one asynchronous investigation, synthetic probe, or trusted fixture.
 - `stage_failure_probe` moves a completed synthetic probe into the visible intake form without executing it or calling it observed evidence.
 - `show_investigation` brings a queued result or competing cause into the visible page.
@@ -43,7 +44,7 @@ BugReel progressively registers seven tools through `document.modelContext.regis
 
 The tools call the same React actions and server routes as the human interface. There is no hidden agent-only workflow. Mutating and view-changing tool calls also leave a factual activity receipt on the visible page so the human can see what the agent changed. Tool registrations use an `AbortController` for cleanup, strict JSON schemas, read-only annotations where appropriate, and explicit descriptions of side effects and trust boundaries.
 
-In an ordinary browser, BugReel remains fully usable and labels the integration `WEBMCP READY`. In ChatGPT's in-app browser, or Chrome with WebMCP testing enabled, the header reports `7 TOOLS` after registration.
+In an ordinary browser, BugReel remains fully usable and labels the integration `WEBMCP READY`. In ChatGPT's in-app browser, or Chrome with WebMCP testing enabled, the header reports `9 TOOLS` after registration.
 
 The collaboration boundary is deliberate: an agent may organize evidence and propose a diagnosis, but only a trusted checkout may apply a patch and pass the regression gate.
 
@@ -76,9 +77,12 @@ npm run bugreel -- --repo . --run "npm test" --server http://127.0.0.1:8787
 npm run demo:cli
 npm run bugreel -- --repo . --failure-file ./failure.log
 npm run bugreel -- --repo https://github.com/owner/repo --failure-file ./failure.log --json
+npm run bugreel -- --repo . --verify-pr --run "npm test" --server https://bugreel.onrender.com
 ```
 
 The automatic command runs one trusted local test command. A passing command creates nothing. A failing command is captured immediately in Team View, then the CLI reads the local checkout and updates the same card with a GLM diagnosis or an honest timeout. No failure log or expected-behavior field is required.
+
+After a developer applies a reviewed change in a local checkout, `--verify-pr` checks that `git diff --check` is clean, requires a nonempty local diff, reruns the supplied regression command, and posts a visible PR handoff receipt. It prints `git push` and `gh pr create` commands but never runs them. The final push and PR creation are intentional user actions after review.
 
 The CLI accepts local repositories. A live local hunt sends only bounded source evidence to OpenCode Go. Use the bundled fixture when source must remain offline. The browser never executes repository code.
 
@@ -103,7 +107,9 @@ The team replay is deliberately secondary to the one-failure path. Expand it aft
 - `POST /api/investigations` starts a failure-led investigation.
 - `POST /api/failure-samples` starts a GLM-generated, source-cited synthetic probe.
 - `POST /api/issue-sweeps` starts one bounded GLM pass that returns exactly three source-cited probes across distinct issue classes.
+- `GET /api/github-users/:username/repos` lists a profile's non-fork, non-archived public repositories for the visible picker.
 - `POST /api/demo-swarm` starts twenty trusted fixture workers and runs their patch plus targeted regression gates concurrently.
+- `POST /api/pr-receipts` records a verified local-diff and passing-regression handoff, but cannot create a GitHub PR.
 - `POST /api/imports` immediately captures a trusted local CLI failure in Team View.
 - `PUT /api/imports/:id` updates that same card with the completed or partial investigation.
 - `GET /api/investigations` returns jobs plus active and queued model counts.
@@ -114,6 +120,8 @@ The deployed public surface accepts only an exact `https://github.com/owner/repo
 The failure sampler never claims it observed a bug. Every generated artifact begins with `SYNTHETIC PROBE - NOT OBSERVED`. It becomes real failure evidence only after its proposed command or test is executed and actually fails.
 
 The issue sweep makes coverage visible beyond one obvious boundary case. It returns exactly three different classes of source-cited test ideas in one model pass, but they are still leads for human verification, not a count of confirmed defects.
+
+The PR handoff is deliberately a separate execution boundary. It proves only that the current local change has a clean diff and the supplied regression passed. It never pushes a branch, stores a GitHub token, or creates a pull request on behalf of the user.
 
 The 20-bug replay uses generated Python fixtures controlled by BugReel. Each worker first proves its regression fails, applies a bounded source change in an isolated temporary folder, and reruns `python3 -B -m unittest discover`. This proves orchestration and regression gating. It does not prove that arbitrary public repository code is safe to execute or that twenty GLM calls run simultaneously.
 

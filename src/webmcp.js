@@ -84,6 +84,21 @@ export function createBugReelToolDefinitions(getBridge) {
       execute: async (input = {}) => toolResult(await requireBridge(getBridge).generateIssueSweep(input))
     },
     {
+      name: "list_public_repositories",
+      title: "List a GitHub profile's open repositories",
+      description: "Load a GitHub profile's non-fork, non-archived public repositories into the visible BugReel picker. This reads public GitHub metadata and changes only the browser view; it does not analyze source or execute code.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          username: { type: "string", description: "GitHub username whose public repositories should be shown." }
+        },
+        required: ["username"],
+        additionalProperties: false
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      execute: async (input = {}) => toolResult(await requireBridge(getBridge).listPublicRepositories(input))
+    },
+    {
       name: "inspect_bugreel_job",
       title: "Inspect a BugReel job",
       description: "Read the current status and bounded result of one asynchronous BugReel investigation, synthetic probe, or trusted fixture job. This does not change the visible page or repository.",
