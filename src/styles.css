@@ -97,6 +97,20 @@ h1 {
 .demo-button:hover { border-color: var(--acid); background: var(--raised); }
 .demo-button.primary { color: var(--void); border-color: var(--acid); background: var(--acid); }
 .demo-button span { font-size: 13px; }
+.issue-sweep { margin-top: 14px; border: 1px solid var(--cyan); padding: 14px; background: rgb(88 220 255 / 4%); }
+.issue-sweep > header { display: flex; gap: 10px; align-items: baseline; }
+.issue-sweep > header span, .issue-sweep > span { color: var(--cyan); font: 800 9px/1 var(--mono); letter-spacing: .1em; }
+.issue-sweep > header strong, .issue-sweep > strong { font-size: 13px; }
+.issue-sweep > p, .issue-sweep > small { display: block; margin: 9px 0 0; color: var(--muted); font: 11px/1.45 var(--mono); }
+.issue-sweep-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.issue-sweep-grid article { display: grid; align-content: start; gap: 8px; min-height: 190px; padding: 11px; border: 1px solid var(--line); background: var(--void); }
+.issue-sweep-grid article > small { color: var(--cyan); font: 800 9px/1 var(--mono); letter-spacing: .08em; }
+.issue-sweep-grid article > strong { font-size: 13px; line-height: 1.2; }
+.issue-sweep-grid code { color: var(--acid); font: 10px/1.35 var(--mono); }
+.issue-sweep-grid p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.issue-sweep-grid button { min-height: 34px; margin-top: auto; border: 1px solid var(--cyan); color: var(--cyan); background: transparent; cursor: pointer; font: 800 9px/1 var(--mono); letter-spacing: .05em; }
+.issue-sweep-grid button:hover { background: rgb(88 220 255 / 10%); }
+.issue-sweep-boundary { color: var(--orange) !important; }
 .intake-bar { display: grid; gap: 15px; margin-top: 30px; }
 .form-heading { min-height: 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .form-heading span, .form-heading small { font: 800 9px/1 var(--mono); letter-spacing: .07em; }
@@ -416,6 +430,9 @@ h1 {
   .primary-stage { gap: 12px; padding-top: 12px; }
   .intake-column { padding: 20px; }
   h1 { font-size: 44px; }
+  .demo-launcher { grid-template-columns: 1fr; }
+  .demo-launcher p { grid-column: 1; }
+  .issue-sweep-grid { grid-template-columns: 1fr; }
   .intake-bar { grid-template-columns: 1fr; margin-top: 24px; }
   .failure-field, .expected-details, .intake-actions, .input-boundary, .notice { grid-column: 1; }
   .agent-receipt { grid-template-columns: auto 1fr; }

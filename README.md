@@ -35,6 +35,7 @@ BugReel progressively registers seven tools through `document.modelContext.regis
 - `inspect_bugreel_workspace` reads the staged failure, current investigation, queue, and verification boundary.
 - `start_failure_hunt` sends an observed failure into the existing bounded GLM investigation route.
 - `generate_failure_probe` creates a source-cited synthetic test idea that remains unobserved until a human runs it.
+- `generate_issue_sweep` creates three distinct source-cited synthetic test ideas, so an agent can show boundary, state, control, data, or concurrency coverage without pretending that it found three confirmed bugs.
 - `inspect_bugreel_job` retrieves the bounded status and result of one asynchronous investigation, synthetic probe, or trusted fixture.
 - `stage_failure_probe` moves a completed synthetic probe into the visible intake form without executing it or calling it observed evidence.
 - `show_investigation` brings a queued result or competing cause into the visible page.
@@ -101,6 +102,7 @@ The team replay is deliberately secondary to the one-failure path. Expand it aft
 
 - `POST /api/investigations` starts a failure-led investigation.
 - `POST /api/failure-samples` starts a GLM-generated, source-cited synthetic probe.
+- `POST /api/issue-sweeps` starts one bounded GLM pass that returns exactly three source-cited probes across distinct issue classes.
 - `POST /api/demo-swarm` starts twenty trusted fixture workers and runs their patch plus targeted regression gates concurrently.
 - `POST /api/imports` immediately captures a trusted local CLI failure in Team View.
 - `PUT /api/imports/:id` updates that same card with the completed or partial investigation.
@@ -110,6 +112,8 @@ The team replay is deliberately secondary to the one-failure path. Expand it aft
 The deployed public surface accepts only an exact `https://github.com/owner/repository` URL. Deep links such as `/blob/...` are rejected instead of silently changing repository scope. Model-start routes are limited to four requests per client per fifteen minutes and return `429` with a retry delay when exhausted. This protects the shared OpenCode Go credential and keeps the one-slot model queue meaningful.
 
 The failure sampler never claims it observed a bug. Every generated artifact begins with `SYNTHETIC PROBE - NOT OBSERVED`. It becomes real failure evidence only after its proposed command or test is executed and actually fails.
+
+The issue sweep makes coverage visible beyond one obvious boundary case. It returns exactly three different classes of source-cited test ideas in one model pass, but they are still leads for human verification, not a count of confirmed defects.
 
 The 20-bug replay uses generated Python fixtures controlled by BugReel. Each worker first proves its regression fails, applies a bounded source change in an isolated temporary folder, and reruns `python3 -B -m unittest discover`. This proves orchestration and regression gating. It does not prove that arbitrary public repository code is safe to execute or that twenty GLM calls run simultaneously.
 

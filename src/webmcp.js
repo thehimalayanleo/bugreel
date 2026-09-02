@@ -69,6 +69,21 @@ export function createBugReelToolDefinitions(getBridge) {
       execute: async (input = {}) => toolResult(await requireBridge(getBridge).generateProbe(input))
     },
     {
+      name: "generate_issue_sweep",
+      title: "Generate a three-class issue sweep",
+      description: "Ask BugReel to identify three distinct, source-cited synthetic test ideas in a public repository. These are coverage leads, not observed bugs, and none are executed by the browser.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          repoUrl: { type: "string", description: "Public GitHub repository URL to inspect." }
+        },
+        required: ["repoUrl"],
+        additionalProperties: false
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      execute: async (input = {}) => toolResult(await requireBridge(getBridge).generateIssueSweep(input))
+    },
+    {
       name: "inspect_bugreel_job",
       title: "Inspect a BugReel job",
       description: "Read the current status and bounded result of one asynchronous BugReel investigation, synthetic probe, or trusted fixture job. This does not change the visible page or repository.",

@@ -17,6 +17,7 @@ export default function App() {
   const [replaying, setReplaying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [probeSubmitting, setProbeSubmitting] = useState(false);
+  const [sweepSubmitting, setSweepSubmitting] = useState(false);
   const [swarmStarting, setSwarmStarting] = useState(false);
   const [probeKind, setProbeKind] = useState("boundary");
   const [jobs, setJobs] = useState([]);
@@ -217,6 +218,34 @@ export default function App() {
     }
   }
 
+  async function generateIssueSweep(input = {}) {
+    const nextRepoUrl = input.repoUrl ?? repoUrl;
+    setRepoUrl(nextRepoUrl);
+    setSweepSubmitting(true);
+    setNoticeKind("loading");
+    setNotice("Asking GLM to scan three distinct issue classes. Every result remains synthetic.");
+    try {
+      const response = await fetch("/api/issue-sweeps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl: nextRepoUrl })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "The issue sweep stopped unexpectedly.");
+      setHealth((value) => ({ ...value, liveModel: true }));
+      setActiveJobId(payload.id);
+      setJobs((current) => [payload, ...current.filter((job) => job.id !== payload.id)]);
+      setNotice(payload.message);
+      return payload;
+    } catch (error) {
+      setNoticeKind("error");
+      setNotice(error.message);
+      throw error;
+    } finally {
+      setSweepSubmitting(false);
+    }
+  }
+
   async function startDemoSwarm() {
     if (teamDetailsRef.current) teamDetailsRef.current.open = true;
     setSwarmStarting(true);
@@ -242,13 +271,13 @@ export default function App() {
     }
   }
 
-  function useGeneratedProbe(job, source = "human") {
-    if (!job.sample) return;
+  function useGeneratedProbe(job, source = "human", probe = job.sample) {
+    if (!probe) return;
     setActiveJobId("");
-    setFailure(job.sample.failureEvidence);
-    setExpected(job.sample.expectedBehavior);
+    setFailure(probe.failureEvidence);
+    setExpected(probe.expectedBehavior);
     setNoticeKind("warning");
-    setNotice(job.sample.boundary);
+    setNotice(probe.boundary);
     if (source === "agent") {
       recordAgentActivity(`Staged synthetic probe ${job.id}`, "Waiting for a human to run it and report an observed failure");
     }
@@ -313,6 +342,17 @@ export default function App() {
         probeCommand: job.sample.probeCommand,
         boundary: job.sample.boundary
       };
+    }
+    if (job.sweep) {
+      result.issueSweep = job.sweep.map((probe) => ({
+        title: probe.title,
+        kind: probe.kind,
+        synthetic: true,
+        citation: { file: probe.file, lines: probe.lines },
+        whyPlausible: probe.whyPlausible,
+        probeCommand: probe.probeCommand,
+        boundary: probe.boundary
+      }));
     }
     const jobInvestigation = job.investigation || job.preview;
     if (jobInvestigation) {
@@ -446,6 +486,7 @@ export default function App() {
     }),
     startHunt: (input) => createHunt(input, "agent"),
     generateProbe: generateFailureProbe,
+    generateIssueSweep,
     inspectJob,
     stageProbe: stageFailureProbe,
     showInvestigation,
@@ -489,7 +530,14 @@ export default function App() {
             <button className="demo-button" type="button" onClick={() => startDemoSwarm().catch(() => {})} disabled={swarmStarting}>
               <span>20×</span> {swarmStarting ? "STARTING WORKERS..." : activeDemoRunning ? "WATCH WORKERS MOVE" : "RUN 20-BUG REPLAY"}
             </button>
+            <button className="demo-button" type="button" onClick={() => generateIssueSweep().catch(() => {})} disabled={sweepSubmitting}>
+              <span>3×</span> {sweepSubmitting ? "SCANNING SOURCE..." : "SCAN 3 ISSUE CLASSES"}
+            </button>
           </div>
+
+          {activeJob?.type === "failure_sweep" && (
+            <IssueSweepResults job={activeJob} onUseProbe={(probe) => useGeneratedProbe(activeJob, "human", probe)} />
+          )}
 
           <form className="intake-bar" onSubmit={startHunt}>
             <div className="form-heading"><span>OR USE A REAL FAILURE</span><small>Public source only</small></div>
@@ -632,6 +680,36 @@ const OPS_COLUMNS = [
   ["verify", "VERIFY", "Regression gate"],
   ["done", "READY", "Passed and reviewable"]
 ];
+
+function IssueSweepResults({ job, onUseProbe }) {
+  if (job.status !== "complete" || !Array.isArray(job.sweep)) {
+    return (
+      <section className="issue-sweep" aria-live="polite">
+        <span>ISSUE SWEEP</span>
+        <strong>{job.message}</strong>
+        <small>This scan is looking for distinct classes of test ideas, not asserting three bugs.</small>
+      </section>
+    );
+  }
+  return (
+    <section className="issue-sweep" aria-label="Synthetic issue sweep results">
+      <header><span>ISSUE SWEEP</span><strong>Three different test ideas from one source pass.</strong></header>
+      <p>Each card is a source-cited hypothesis, not an observed issue. Load one only after you decide to run it.</p>
+      <div className="issue-sweep-grid">
+        {job.sweep.map((probe, index) => (
+          <article key={`${probe.kind}-${probe.file}-${index}`}>
+            <small>{String(index + 1).padStart(2, "0")} · {probe.kind.toUpperCase()}</small>
+            <strong>{probe.title}</strong>
+            <code>{probe.file}:{probe.lines[0]}-{probe.lines[1]}</code>
+            <p>{probe.whyPlausible}</p>
+            <button type="button" onClick={() => onUseProbe(probe)}>LOAD THIS PROBE</button>
+          </article>
+        ))}
+      </div>
+      <small className="issue-sweep-boundary">A loaded idea stays marked SYNTHETIC PROBE - NOT OBSERVED until the proposed test actually fails.</small>
+    </section>
+  );
+}
 
 function BugOpsBoard({ jobs, manager, activeJobId, activeJob, onSelect, onStartSwarm, swarmStarting, onUseProbe }) {
   const columns = Object.fromEntries(OPS_COLUMNS.map(([id]) => [id, jobs.filter((job) => (job.boardStage || "intake") === id)]));

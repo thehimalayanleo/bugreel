@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   cleanDiagnostic, createBugAvatar, decorateInvestigation, FAST_CONTEXT_LIMITS, failureReferences, finalizeTimedOutInvestigation, parseGitHubRepo,
   openCodeRunArgs, parseOpenCodeEvents, provisionalInvestigation, rankRepository, renderCli,
-  runInvestigation, sampleFailure, seedInvestigation, sourceContext, spawnText, validateInvestigationInput, verifyGeneratedFixture
+  runInvestigation, sampleFailure, sampleFailureSweep, seedInvestigation, sourceContext, spawnText, validateInvestigationInput, verifyGeneratedFixture
 } from "./bugreel.js";
 
 const repository = {
@@ -224,6 +224,21 @@ test("retries one invalid synthetic-probe citation and still fails closed", asyn
   assert.match(prompts[1], /CITATION CORRECTION/);
   assert.deepEqual(result.lines, [1, 2]);
   assert.equal(result.synthetic, true);
+});
+
+test("returns three distinct, source-cited issue classes from one bounded sweep", async () => {
+  const result = await sampleFailureSweep({}, repository, {
+    call: async () => ({
+      probes: [
+        { title: "Zero boundary", kind: "boundary", failureEvidence: "zero division", expectedBehavior: "reject zero", file: "src/calculator.py", lines: [1, 2], whyPlausible: "No guard", probeCommand: "pytest zero" },
+        { title: "Label state", kind: "state", failureEvidence: "stale label", expectedBehavior: "reset label", file: "src/formatting.py", lines: [1, 2], whyPlausible: "Value stays", probeCommand: "pytest state" },
+        { title: "Control flow", kind: "control", failureEvidence: "wrong branch", expectedBehavior: "take branch", file: "src/calculator.py", lines: [1, 2], whyPlausible: "Branch untested", probeCommand: "pytest control" }
+      ]
+    })
+  });
+  assert.equal(result.length, 3);
+  assert.deepEqual(result.map((item) => item.kind), ["boundary", "state", "control"]);
+  assert.ok(result.every((item) => item.synthetic && /^SYNTHETIC PROBE - NOT OBSERVED/.test(item.failureEvidence)));
 });
 
 test("keeps generated figures provisional until the resolver is grounded", () => {

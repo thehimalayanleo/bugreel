@@ -12,6 +12,7 @@ test("publishes the bounded BugReel WebMCP surface", () => {
     "inspect_bugreel_workspace",
     "start_failure_hunt",
     "generate_failure_probe",
+    "generate_issue_sweep",
     "inspect_bugreel_job",
     "stage_failure_probe",
     "show_investigation",
@@ -20,6 +21,20 @@ test("publishes the bounded BugReel WebMCP surface", () => {
   assert.equal(new Set(definitions.map((tool) => tool.name)).size, definitions.length);
   assert.equal(definitions[0].annotations.readOnlyHint, true);
   assert.equal(definitions[1].annotations.readOnlyHint, false);
+});
+
+test("issue sweep forwards one explicit public repository", async () => {
+  const observed = [];
+  const definitions = createBugReelToolDefinitions(() => ({
+    generateIssueSweep: async (input) => {
+      observed.push(input);
+      return { id: "JOB-SWEEP7", status: "queued" };
+    }
+  }));
+  const tool = definitions.find((item) => item.name === "generate_issue_sweep");
+  const result = await tool.execute({ repoUrl: "https://github.com/example/repo" });
+  assert.deepEqual(observed, [{ repoUrl: "https://github.com/example/repo" }]);
+  assert.deepEqual(readResult(result), { id: "JOB-SWEEP7", status: "queued" });
 });
 
 test("inspect_bugreel_job retrieves one asynchronous result without changing it", async () => {

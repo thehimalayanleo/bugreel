@@ -7,7 +7,7 @@ import { clientKey, createRateLimiter } from "./rate-limit.js";
 import { sampleInvestigation } from "../src/sample.js";
 import {
   createBugAvatar, FAILURE_SAMPLE_KINDS, finalizeTimedOutInvestigation, fetchGitHubRepository, MODEL, modelAvailable, parseGitHubRepo,
-  runInvestigation, sampleFailure, validateInvestigationInput, verifyGeneratedFixture
+  runInvestigation, sampleFailure, sampleFailureSweep, validateInvestigationInput, verifyGeneratedFixture
 } from "./bugreel.js";
 
 const root = fileURLToPath(new URL("../dist", import.meta.url));
@@ -70,6 +70,17 @@ const server = createServer(async (request, response) => {
       const input = { ...parsed, repoUrl, kind };
       const job = createJob("failure_sample", input, `Preparing a synthetic ${kind} failure probe.`);
       void runSampleJob(job.id, input);
+      return json(response, 202, publicJob(job));
+    }
+    if (request.method === "POST" && request.url === "/api/issue-sweeps") {
+      if (!allowModelStart(request, response)) return;
+      const body = await readJson(request);
+      const repoUrl = String(body.repoUrl || "").trim();
+      const parsed = parseGitHubRepo(repoUrl);
+      if (!await modelIsAvailable()) return json(response, 503, { error: "OpenCode Go is not authenticated. Run `opencode auth login` and retry." });
+      const input = { ...parsed, repoUrl };
+      const job = createJob("failure_sweep", input, "Preparing three distinct synthetic issue probes.");
+      void runSweepJob(job.id, input);
       return json(response, 202, publicJob(job));
     }
     const jobMatch = request.method === "GET" && request.url?.match(/^\/api\/investigations\/([A-Z0-9-]+)$/);
@@ -135,13 +146,30 @@ async function runSampleJob(id, input) {
   }
 }
 
+async function runSweepJob(id, input) {
+  const job = jobs.get(id);
+  try {
+    updateJob(job, "running", "repository", "Reading bounded source for a three-class issue sweep.");
+    const repository = await fetchGitHubRepository(input);
+    const sweep = await sampleFailureSweep(input, repository, {
+      acquireModelSlot: (request) => acquireModelSlot(job, request)
+    });
+    job.sweep = sweep;
+    updateJob(job, "complete", "complete", "GLM returned three source-cited test ideas. They remain synthetic until a human runs them.");
+  } catch (error) {
+    updateJob(job, "error", "error", error.message || "The issue sweep stopped unexpectedly.");
+  }
+}
+
 function createJob(type, input, message) {
   const now = new Date().toISOString();
   const job = {
     id: `JOB-${randomUUID().slice(0, 8).toUpperCase()}`,
     type,
     repo: `${input.owner}/${input.repo}`,
-    label: type === "failure_sample" ? `${input.kind} probe` : String(input.failure).split("\n").find(Boolean)?.slice(0, 90) || "Failure investigation",
+    label: type === "failure_sample" ? `${input.kind} probe`
+      : type === "failure_sweep" ? "3-class issue sweep"
+        : String(input.failure).split("\n").find(Boolean)?.slice(0, 90) || "Failure investigation",
     status: "queued",
     phase: "intake",
     message,
@@ -349,7 +377,8 @@ function publicJob(job) {
     ...(job.verification ? { verification: job.verification } : {}),
     ...(job.preview ? { preview: job.preview } : {}),
     ...(job.investigation ? { investigation: job.investigation } : {}),
-    ...(job.sample ? { sample: job.sample } : {})
+    ...(job.sample ? { sample: job.sample } : {}),
+    ...(job.sweep ? { sweep: job.sweep } : {})
   };
 }
 

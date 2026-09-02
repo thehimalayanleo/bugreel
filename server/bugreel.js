@@ -580,17 +580,13 @@ export async function runInvestigation(input, repository, {
 
 export const FAILURE_SAMPLE_KINDS = Object.freeze(["state", "boundary", "control", "concurrency", "data"]);
 
-export async function sampleFailure(input, repository, {
-  call = callModel,
-  acquireModelSlot = async () => () => {}
-} = {}) {
-  const kind = FAILURE_SAMPLE_KINDS.includes(input.kind) ? input.kind : "boundary";
+function failureSampleContext(repository) {
   const files = repository.files
     .filter((file) => [".js", ".jsx", ".mjs", ".py", ".ts", ".tsx"].includes(extname(file.path).toLowerCase()))
     .slice(0, 3);
   if (!files.length) throw new Error("No bounded source files are available for a synthetic failure probe.");
   let used = 0;
-  const context = files.map((file) => {
+  return files.map((file) => {
     const selected = [];
     for (const [index, line] of file.content.split("\n").slice(0, 80).entries()) {
       const numbered = `${String(index + 1).padStart(5)} | ${line}`;
@@ -600,34 +596,17 @@ export async function sampleFailure(input, repository, {
     }
     return { path: file.path, start: 1, end: selected.length, snippet: selected.join("\n") };
   }).filter((item) => item.end > 0);
-  const prompt = `You are BUGREEL PROBE LAB. Propose one plausible ${kind} bug that a developer could deliberately test against the bounded source below. This is a synthetic probe, not an observed failure. Do not claim the bug exists. Cite only supplied files and lines. Return a concise failing-test or stack-trace-shaped artifact that could guide a real test.
+}
 
-REPOSITORY
-${repository.name}@${repository.branch}
+function sampleCitationIsValid(value, context) {
+  const cited = context.find((item) => item.path === value?.file);
+  return Boolean(cited && Array.isArray(value.lines) && value.lines.length === 2
+    && value.lines.every(Number.isInteger) && value.lines[0] >= cited.start
+    && value.lines[0] <= value.lines[1] && value.lines[1] <= cited.end);
+}
 
-BOUNDED SOURCE
-${context.map((item) => `===== ${item.path}:${item.start}-${item.end} =====\n${item.snippet}`).join("\n")}
-
-Return only {"title":"...","kind":"${kind}","failureEvidence":"SYNTHETIC PROBE - NOT OBSERVED\\n...","expectedBehavior":"...","file":"relative/path","lines":[1,2],"whyPlausible":"...","probeCommand":"..."}. Keep the response under 450 words.`;
-  const release = await acquireModelSlot({ phase: "sampler", message: "GLM slot acquired. Generating a synthetic failure probe." });
-  let result;
-  const citationIsValid = (value) => {
-    const cited = context.find((item) => item.path === value?.file);
-    return Boolean(cited && Array.isArray(value.lines) && value.lines.length === 2
-      && value.lines.every(Number.isInteger) && value.lines[0] >= cited.start
-      && value.lines[0] <= value.lines[1] && value.lines[1] <= cited.end);
-  };
-  try {
-    result = await call(prompt, { variant: "low", timeout: 45_000 });
-    if (!citationIsValid(result)) {
-      const allowed = context.map((item) => `${item.path}:${item.start}-${item.end}`).join("\n");
-      const correction = `${prompt}\n\nCITATION CORRECTION\nYour previous response used a file or line range outside the supplied source. Return one corrected full JSON object. The file must exactly match one allowed path, and both line numbers must stay inside its listed range. Do not change the synthetic, unobserved boundary.\n\nALLOWED CITATIONS\n${allowed}\n\nPREVIOUS RESPONSE\n${JSON.stringify(result).slice(0, 4_000)}`;
-      result = await call(correction, { variant: "low", timeout: 45_000 });
-    }
-  } finally {
-    release();
-  }
-  if (!citationIsValid(result)) throw new Error("GLM returned a synthetic probe without a valid source citation after one bounded correction pass.");
+function materializeSample(result, kind, context) {
+  if (!sampleCitationIsValid(result, context)) throw new Error("GLM returned a synthetic probe without a valid source citation after one bounded correction pass.");
   const failureEvidence = cleanGeneratedText(result.failureEvidence || "");
   return {
     title: cleanGeneratedText(result.title || `${kind} probe`).slice(0, 100),
@@ -644,6 +623,73 @@ Return only {"title":"...","kind":"${kind}","failureEvidence":"SYNTHETIC PROBE -
     probeCommand: cleanGeneratedText(result.probeCommand || ""),
     boundary: "GLM generated this as a source-cited test idea. It is not failure evidence until the probe is executed and actually fails."
   };
+}
+
+export async function sampleFailure(input, repository, {
+  call = callModel,
+  acquireModelSlot = async () => () => {}
+} = {}) {
+  const kind = FAILURE_SAMPLE_KINDS.includes(input.kind) ? input.kind : "boundary";
+  const context = failureSampleContext(repository);
+  const prompt = `You are BUGREEL PROBE LAB. Propose one plausible ${kind} bug that a developer could deliberately test against the bounded source below. This is a synthetic probe, not an observed failure. Do not claim the bug exists. Cite only supplied files and lines. Return a concise failing-test or stack-trace-shaped artifact that could guide a real test.
+
+REPOSITORY
+${repository.name}@${repository.branch}
+
+BOUNDED SOURCE
+${context.map((item) => `===== ${item.path}:${item.start}-${item.end} =====\n${item.snippet}`).join("\n")}
+
+Return only {"title":"...","kind":"${kind}","failureEvidence":"SYNTHETIC PROBE - NOT OBSERVED\\n...","expectedBehavior":"...","file":"relative/path","lines":[1,2],"whyPlausible":"...","probeCommand":"..."}. Keep the response under 450 words.`;
+  const release = await acquireModelSlot({ phase: "sampler", message: "GLM slot acquired. Generating a synthetic failure probe." });
+  let result;
+  try {
+    result = await call(prompt, { variant: "low", timeout: 45_000 });
+    if (!sampleCitationIsValid(result, context)) {
+      const allowed = context.map((item) => `${item.path}:${item.start}-${item.end}`).join("\n");
+      const correction = `${prompt}\n\nCITATION CORRECTION\nYour previous response used a file or line range outside the supplied source. Return one corrected full JSON object. The file must exactly match one allowed path, and both line numbers must stay inside its listed range. Do not change the synthetic, unobserved boundary.\n\nALLOWED CITATIONS\n${allowed}\n\nPREVIOUS RESPONSE\n${JSON.stringify(result).slice(0, 4_000)}`;
+      result = await call(correction, { variant: "low", timeout: 45_000 });
+    }
+  } finally {
+    release();
+  }
+  return materializeSample(result, kind, context);
+}
+
+export async function sampleFailureSweep(input, repository, {
+  call = callModel,
+  acquireModelSlot = async () => () => {}
+} = {}) {
+  const context = failureSampleContext(repository);
+  const kinds = ["boundary", "state", "control", "data", "concurrency"];
+  const prompt = `You are BUGREEL ISSUE SWEEP. Find exactly three distinct, plausible test ideas across different bug classes in the bounded public source below. This is coverage discovery, not a bug report. Do not claim any issue exists. Every idea must be synthetic, source-cited, and independently runnable by a human. Use three different kinds from: ${kinds.join(", ")}.
+
+REPOSITORY
+${repository.name}@${repository.branch}
+
+BOUNDED SOURCE
+${context.map((item) => `===== ${item.path}:${item.start}-${item.end} =====\n${item.snippet}`).join("\n")}
+
+Return only {"probes":[{"title":"...","kind":"boundary|state|control|concurrency|data","failureEvidence":"SYNTHETIC PROBE - NOT OBSERVED\\n...","expectedBehavior":"...","file":"relative/path","lines":[1,2],"whyPlausible":"...","probeCommand":"..."}]}. Return exactly three probes, each under 160 words.`;
+  const validSweep = (value) => {
+    const probes = Array.isArray(value?.probes) ? value.probes : [];
+    return probes.length === 3
+      && new Set(probes.map((probe) => probe.kind)).size === 3
+      && probes.every((probe) => FAILURE_SAMPLE_KINDS.includes(probe.kind) && sampleCitationIsValid(probe, context));
+  };
+  const release = await acquireModelSlot({ phase: "sweeper", message: "GLM slot acquired. Scanning three distinct issue classes." });
+  let result;
+  try {
+    result = await call(prompt, { variant: "low", timeout: 45_000 });
+    if (!validSweep(result)) {
+      const allowed = context.map((item) => `${item.path}:${item.start}-${item.end}`).join("\n");
+      const correction = `${prompt}\n\nSWEEP CORRECTION\nReturn one corrected JSON object with exactly three probes. Their kinds must be distinct and each citation must use only an allowed file and line range. Do not remove the synthetic, unobserved boundary.\n\nALLOWED CITATIONS\n${allowed}\n\nPREVIOUS RESPONSE\n${JSON.stringify(result).slice(0, 8_000)}`;
+      result = await call(correction, { variant: "low", timeout: 45_000 });
+    }
+  } finally {
+    release();
+  }
+  if (!validSweep(result)) throw new Error("GLM returned an issue sweep without three distinct, valid source citations after one bounded correction pass.");
+  return result.probes.map((probe) => materializeSample(probe, probe.kind, context));
 }
 
 function cleanGeneratedText(value) {
