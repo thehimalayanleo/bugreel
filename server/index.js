@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { clientKey, createRateLimiter } from "./rate-limit.js";
 import { sampleInvestigation } from "../src/sample.js";
 import {
   createBugAvatar, FAILURE_SAMPLE_KINDS, finalizeTimedOutInvestigation, fetchGitHubRepository, MODEL, modelAvailable, parseGitHubRepo,
@@ -17,6 +18,7 @@ const jobs = new Map();
 const MODEL_CONCURRENCY = 1;
 const activeModelJobs = new Set();
 const modelWaiters = [];
+const startLimiter = createRateLimiter({ max: 4, windowMs: 15 * 60_000 });
 let modelAvailability = { value: false, expiresAt: 0 };
 
 const server = createServer(async (request, response) => {
@@ -50,6 +52,7 @@ const server = createServer(async (request, response) => {
       return json(response, 200, publicJob(imported));
     }
     if (request.method === "POST" && request.url === "/api/investigations") {
+      if (!allowModelStart(request, response)) return;
       const body = await readJson(request);
       const input = validateInvestigationInput(body);
       if (!await modelIsAvailable()) return json(response, 503, { error: "OpenCode Go is not authenticated. Run `opencode auth login` and retry." });
@@ -58,6 +61,7 @@ const server = createServer(async (request, response) => {
       return json(response, 202, publicJob(job));
     }
     if (request.method === "POST" && request.url === "/api/failure-samples") {
+      if (!allowModelStart(request, response)) return;
       const body = await readJson(request);
       const repoUrl = String(body.repoUrl || "").trim();
       const parsed = parseGitHubRepo(repoUrl);
@@ -311,6 +315,16 @@ function updateJob(job, status, phase, message, preview) {
   console.log(`[job ${job.id}] ${status}/${phase}: ${message}`);
 }
 
+function allowModelStart(request, response) {
+  const decision = startLimiter.take(clientKey(request.headers, request.socket.remoteAddress));
+  if (decision.allowed) return true;
+  json(response, 429, {
+    error: "Too many GLM jobs from this client. Try again after the listed delay.",
+    retryAfterSeconds: decision.retryAfterSeconds
+  }, { "Retry-After": String(decision.retryAfterSeconds) });
+  return false;
+}
+
 function publicJob(job) {
   const waiterIndex = modelWaiters.findIndex((item) => item.job.id === job.id);
   return {
@@ -356,7 +370,7 @@ async function readJson(request) {
   return JSON.parse(body || "{}");
 }
 
-function json(response, status, value) {
-  response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+function json(response, status, value, headers = {}) {
+  response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers });
   response.end(JSON.stringify(value));
 }

@@ -36,10 +36,12 @@ const HUNT_STAGES = [
 
 export function parseGitHubRepo(input) {
   const url = new URL(input);
-  if (url.protocol !== "https:" || url.hostname !== "github.com") {
+  if (url.protocol !== "https:" || url.hostname !== "github.com" || url.username || url.password || url.port) {
     throw new Error("Repository must be a public https://github.com URL.");
   }
-  const [owner, rawRepo] = url.pathname.split("/").filter(Boolean);
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length !== 2) throw new Error("Repository URL must include exactly an owner and repository name.");
+  const [owner, rawRepo] = parts;
   const repo = rawRepo?.replace(/\.git$/, "");
   if (!owner || !repo || !/^[\w.-]+$/.test(owner) || !/^[\w.-]+$/.test(repo)) {
     throw new Error("Repository URL must include an owner and repository name.");

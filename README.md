@@ -107,6 +107,8 @@ The team replay is deliberately secondary to the one-failure path. Expand it aft
 - `GET /api/investigations` returns jobs plus active and queued model counts.
 - `GET /api/investigations/:id` returns one investigation or sampler job.
 
+The deployed public surface accepts only an exact `https://github.com/owner/repository` URL. Deep links such as `/blob/...` are rejected instead of silently changing repository scope. Model-start routes are limited to four requests per client per fifteen minutes and return `429` with a retry delay when exhausted. This protects the shared OpenCode Go credential and keeps the one-slot model queue meaningful.
+
 The failure sampler never claims it observed a bug. Every generated artifact begins with `SYNTHETIC PROBE - NOT OBSERVED`. It becomes real failure evidence only after its proposed command or test is executed and actually fails.
 
 The 20-bug replay uses generated Python fixtures controlled by BugReel. Each worker first proves its regression fails, applies a bounded source change in an isolated temporary folder, and reruns `python3 -B -m unittest discover`. This proves orchestration and regression gating. It does not prove that arbitrary public repository code is safe to execute or that twenty GLM calls run simultaneously.
@@ -131,6 +133,8 @@ The repository includes `render.yaml` for a single Node web service. The service
 4. Verify `/api/health`, the primary evidence chase, and all seven WebMCP tools from an anonymous browser session.
 
 Local development binds to `127.0.0.1`. The Render blueprint sets `HOST=0.0.0.0` for the public service. The API credential remains server-side and is never sent to the browser.
+
+Jobs are intentionally in memory for this hackathon deployment. A Render Free service may restart or spin down, so completed job history is not durable. Persistent history requires attaching a persistent disk on a paid service or configuring an external database; neither is claimed by this public demo.
 
 ## Entry packets
 

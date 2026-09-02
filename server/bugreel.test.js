@@ -19,6 +19,13 @@ test("parses a public GitHub repository URL", () => {
   assert.deepEqual(parseGitHubRepo("https://github.com/openai/openai-node.git"), { owner: "openai", repo: "openai-node" });
 });
 
+test("rejects a GitHub deep link rather than silently changing repository scope", () => {
+  assert.throws(
+    () => parseGitHubRepo("https://github.com/openai/openai-node/blob/main/src/index.ts"),
+    /exactly an owner and repository name/
+  );
+});
+
 test("validates a failure-led web investigation", () => {
   const input = validateInvestigationInput({ repoUrl: "https://github.com/openai/openai-node", failure, expected: "reject zero" });
   assert.equal(input.repo, "openai-node");
